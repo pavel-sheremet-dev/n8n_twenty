@@ -1,0 +1,96 @@
+{
+  "name": "Приклад 2. n8n → Twenty: створити контакт",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7c2e4f10-5a6b-4c8d-9e0f-1a2b3c4d0001",
+      "name": "Запуск вручну",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b2e1d4f3-0001-4c7f-8e3b-2d4f6a8c0e01",
+              "name": "firstName",
+              "value": "Олена",
+              "type": "string"
+            },
+            {
+              "id": "b2e1d4f3-0002-4c7f-8e3b-2d4f6a8c0e02",
+              "name": "lastName",
+              "value": "Петренко",
+              "type": "string"
+            },
+            {
+              "id": "b2e1d4f3-0003-4c7f-8e3b-2d4f6a8c0e03",
+              "name": "email",
+              "value": "olena.petrenko@example.com",
+              "type": "string"
+            },
+            {
+              "id": "b2e1d4f3-0004-4c7f-8e3b-2d4f6a8c0e04",
+              "name": "jobTitle",
+              "value": "Менеджерка з продажу",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7c2e4f10-5a6b-4c8d-9e0f-1a2b3c4d0002",
+      "name": "Дані нового контакту",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://twenty.internal:3000/rest/people",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"name\": { \"firstName\": $json.firstName, \"lastName\": $json.lastName },\n  \"emails\": { \"primaryEmail\": $json.email },\n  \"jobTitle\": $json.jobTitle\n} }}",
+        "options": {}
+      },
+      "id": "7c2e4f10-5a6b-4c8d-9e0f-1a2b3c4d0003",
+      "name": "Створити контакт у Twenty",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0]
+    }
+  ],
+  "connections": {
+    "Запуск вручну": {
+      "main": [
+        [
+          {
+            "node": "Дані нового контакту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Дані нового контакту": {
+      "main": [
+        [
+          {
+            "node": "Створити контакт у Twenty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

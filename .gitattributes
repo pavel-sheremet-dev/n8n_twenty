@@ -1,0 +1,17 @@
+# За замовчуванням усі текстові файли зберігаються з переносами рядків LF.
+* text=auto eol=lf
+
+# Скрипти macOS обов'язково з LF (інакше bash не запуститься).
+*.sh      text eol=lf
+*.command text eol=lf
+
+# .bat-файли зберігаються «як є» (з CRLF) — інакше cmd.exe може їх неправильно виконати.
+# -text вимикає будь-яке перетворення, тож у ZIP-архіві з GitHub вони теж будуть з CRLF.
+*.bat -text
+
+# PowerShell однаково добре читає LF; файли збережено в UTF-8 з BOM (потрібно для кирилиці у Windows PowerShell 5.1).
+*.ps1 text eol=lf
+
+*.png binary
+*.jpg binary
+*.gif binary

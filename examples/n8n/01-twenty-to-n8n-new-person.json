@@ -1,0 +1,85 @@
+{
+  "name": "Приклад 1. Twenty → n8n: новий контакт",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "twenty-new-person",
+        "options": {}
+      },
+      "id": "0b9a2d8e-3c41-4d0e-9a51-6f2b7c1d0001",
+      "name": "Вебхук від Twenty",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "5f1e7a62-8d4b-4c3a-b0f9-2e6d1a7c9b01"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1f0c3e2-0001-4b6e-9d2a-1c3e5f7a9b01",
+              "name": "event",
+              "value": "={{ $json.body.eventName }}",
+              "type": "string"
+            },
+            {
+              "id": "a1f0c3e2-0002-4b6e-9d2a-1c3e5f7a9b02",
+              "name": "firstName",
+              "value": "={{ $json.body.record.name.firstName }}",
+              "type": "string"
+            },
+            {
+              "id": "a1f0c3e2-0003-4b6e-9d2a-1c3e5f7a9b03",
+              "name": "lastName",
+              "value": "={{ $json.body.record.name.lastName }}",
+              "type": "string"
+            },
+            {
+              "id": "a1f0c3e2-0004-4b6e-9d2a-1c3e5f7a9b04",
+              "name": "email",
+              "value": "={{ $json.body.record.emails.primaryEmail }}",
+              "type": "string"
+            },
+            {
+              "id": "a1f0c3e2-0005-4b6e-9d2a-1c3e5f7a9b05",
+              "name": "jobTitle",
+              "value": "={{ $json.body.record.jobTitle }}",
+              "type": "string"
+            },
+            {
+              "id": "a1f0c3e2-0006-4b6e-9d2a-1c3e5f7a9b06",
+              "name": "twentyId",
+              "value": "={{ $json.body.record.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0b9a2d8e-3c41-4d0e-9a51-6f2b7c1d0002",
+      "name": "Дані контакту",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0]
+    }
+  ],
+  "connections": {
+    "Вебхук від Twenty": {
+      "main": [
+        [
+          {
+            "node": "Дані контакту",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

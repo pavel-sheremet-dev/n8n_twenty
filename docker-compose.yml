@@ -1,0 +1,208 @@
+# =====================================================================
+#  Навчальне середовище: n8n + Twenty CRM + одна спільна PostgreSQL
+# ---------------------------------------------------------------------
+#  Студентам НЕ потрібно редагувати цей файл.
+#  Усе налаштовують скрипти з папок Windows/ та Mac/ — вони самі
+#  створюють файл .env з паролями та ключами.
+#
+#  Що тут запускається («сервіси»):
+#    postgres      — база даних (одна на всіх)
+#    redis         — швидка черга завдань для Twenty
+#    twenty        — Twenty CRM (сайт + API)       → http://localhost:3000
+#    twenty-worker — фонові завдання Twenty (вебхуки, пошта тощо)
+#    n8n           — n8n (автоматизації)           → http://localhost:5678
+#    n8n-runner    — виконує код із вузлів Code у n8n (JavaScript і Python)
+#    ngrok        — тунель: дає n8n публічну https-адресу для вебхуків
+#                    (запускається, лише якщо ви вказали дані ngrok)
+#
+#  Версії програм зафіксовані, щоб у всіх студентів було однаково.
+#  Як оновити версії — див. розділ «Для викладача» в README.md.
+# =====================================================================
+
+name: n8n-twenty
+
+# Обмежуємо розмір журналів (логів), щоб вони не займали весь диск.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Спільні налаштування для двох контейнерів Twenty (сервер і worker).
+x-twenty-env: &twenty-env
+  NODE_PORT: 3000
+  SERVER_URL: http://localhost:3000
+  PG_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?Немає файлу .env - запустіть скрипт start з папки Windows або Mac}@postgres:5432/twenty
+  REDIS_URL: redis://redis:6379
+  STORAGE_TYPE: local
+  ENCRYPTION_KEY: ${TWENTY_ENCRYPTION_KEY}
+  APP_SECRET: ${TWENTY_APP_SECRET}
+  # Twenty за замовчуванням блокує вебхуки на внутрішні адреси (захист від SSRF).
+  # Дозволяємо лише n8n, щоб Twenty міг надсилати вебхуки напряму в n8n.
+  OUTBOUND_HTTP_ALLOWED_INTERNAL_HOSTS: n8n.internal
+
+services:
+  postgres:
+    image: postgres:17   # n8n підтримує PostgreSQL 17+, Twenty — 15+
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: twenty
+    configs:
+      # Під час першого запуску створює окремі бази для n8n і для вправ.
+      - source: postgres-init
+        target: /docker-entrypoint-initdb.d/01-init.sql
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d twenty"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+      start_interval: 2s
+    logging: *logging
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+      start_interval: 2s
+    logging: *logging
+
+  twenty:
+    image: twentycrm/twenty:v2.49.0
+    restart: unless-stopped
+    environment:
+      <<: *twenty-env
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - twenty-data:/app/packages/twenty-server/.local-storage
+    networks:
+      default:
+        aliases: [twenty.internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:3000/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Перший запуск Twenty (створення таблиць) може тривати кілька хвилин.
+      start_period: 600s
+      start_interval: 5s
+    logging: *logging
+
+  twenty-worker:
+    image: twentycrm/twenty:v2.49.0
+    restart: unless-stopped
+    command: ["yarn", "worker:prod"]
+    environment:
+      <<: *twenty-env
+      DISABLE_DB_MIGRATIONS: "true"           # міграції вже виконує сервер twenty
+      DISABLE_CRON_JOBS_REGISTRATION: "true"  # і планувальник теж
+    volumes:
+      - twenty-data:/app/packages/twenty-server/.local-storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      twenty:
+        condition: service_healthy
+    logging: *logging
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.44.4
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      # Редактор відкриваємо локально, а вебхуки отримуємо через ngrok.
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
+      N8N_PROXY_HOPS: 1
+      # Дозволяє вхід через http://localhost у будь-якому браузері (зокрема Safari).
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: Europe/Kyiv
+      TZ: Europe/Kyiv
+      # Код із вузлів Code (JavaScript і Python) виконується в окремому контейнері n8n-runner.
+      N8N_RUNNERS_MODE: external
+      N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+      N8N_RUNNERS_BROKER_LISTEN_ADDRESS: 0.0.0.0
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+    networks:
+      default:
+        aliases: [n8n.internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+      start_interval: 5s
+    logging: *logging
+
+  n8n-runner:
+    image: n8nio/runners:2.44.4   # версія має збігатися з версією n8n
+    restart: unless-stopped
+    environment:
+      N8N_RUNNERS_AUTH_TOKEN: ${N8N_RUNNERS_AUTH_TOKEN}
+      N8N_RUNNERS_TASK_BROKER_URI: http://n8n:5679
+      GENERIC_TIMEZONE: Europe/Kyiv
+      TZ: Europe/Kyiv
+    depends_on:
+      n8n:
+        condition: service_healthy
+    logging: *logging
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["http", "n8n:5678", "--url=${NGROK_DOMAIN:-}", "--log=stdout"]
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    ports:
+      # Тут можна дивитися запити, що приходять через тунель: http://localhost:4040
+      - "127.0.0.1:4040:4040"
+    depends_on:
+      n8n:
+        condition: service_healthy
+    logging: *logging
+
+configs:
+  postgres-init:
+    content: |
+      CREATE USER n8n WITH PASSWORD '${N8N_DB_PASSWORD}';
+      CREATE DATABASE n8n OWNER n8n;
+      CREATE USER student WITH PASSWORD 'student';
+      CREATE DATABASE practice OWNER student;
+
+volumes:
+  postgres-data:
+  redis-data:
+  twenty-data:
+  n8n-data:
